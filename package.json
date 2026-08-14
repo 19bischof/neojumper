@@ -1,0 +1,14 @@
+{
+  "name": "neojumper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Open file locations in a running Neovim tmux pane through a local API.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
