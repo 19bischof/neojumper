@@ -229,45 +229,18 @@ async function editInNeovim(socketPath, file, line) {
   return parsed;
 }
 
+// select-pane alone does not change the active window, so both are required.
+// tmux runs them (plus the client switch) as a single process: passing ";" as
+// its own argument tells tmux to treat what follows as a separate command.
 async function focusTmuxPane(pane) {
   const paneTarget = `${pane.sessionName}:${pane.windowIndex}.${pane.paneId}`;
-  await run(TMUX_BIN, ["select-window", "-t", paneTarget]);
-  await run(TMUX_BIN, ["select-pane", "-t", paneTarget]);
-
   await Promise.all([
-    switchTmuxClient(pane.sessionName),
+    run(TMUX_BIN, [
+      "switch-client", "-t", pane.sessionName,
+      ";", "select-window", "-t", paneTarget,
+      ";", "select-pane", "-t", paneTarget,
+    ]),
     run(OPEN_BIN, ["-a", "Ghostty"]),
-  ]);
-}
-
-async function switchTmuxClient(sessionName) {
-  const { stdout } = await run(TMUX_BIN, [
-    "list-clients",
-    "-F",
-    "#{client_name}\t#{session_name}",
-  ]);
-  const clients = stdout
-    .trim()
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => {
-      const [clientName, clientSession] = line.split("\t");
-      return { clientName, clientSession };
-    });
-  const client =
-    clients.find((candidate) => candidate.clientSession === sessionName) ||
-    clients[0];
-
-  if (!client) {
-    throw new Error("tmux has no attached client to focus.");
-  }
-
-  await run(TMUX_BIN, [
-    "switch-client",
-    "-c",
-    client.clientName,
-    "-t",
-    sessionName,
   ]);
 }
 
@@ -276,12 +249,20 @@ async function openFile(file, line, timings) {
     return findLiveNeovim();
   });
 
+  // The edit does not depend on the tmux pane, and focusing only needs the
+  // pane, so run both flows concurrently.
+  const focusFlow = (async () => {
+    const pane = await timed(timings, "findPane", () => {
+      return findTmuxPane(neovimProcessIds);
+    });
+    await timed(timings, "focus", () => focusTmuxPane(pane));
+    return pane;
+  })();
+
   const [edit, pane] = await Promise.all([
     timed(timings, "nvimEdit", () => editInNeovim(socketPath, file, line)),
-    timed(timings, "findPane", () => findTmuxPane(neovimProcessIds)),
+    focusFlow,
   ]);
-
-  await timed(timings, "focus", () => focusTmuxPane(pane));
 
   return {
     file: edit.path,
