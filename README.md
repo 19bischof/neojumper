@@ -1,7 +1,8 @@
 # Neojumper
 
 A local API that opens a file at a line in the earliest-created running
-Neovim instance, selects its tmux pane, and brings Ghostty forward.
+Neovim instance, closes the other windows in the current tab, selects its tmux
+pane, and brings Ghostty forward.
 
 Relative file paths are resolved from that Neovim instance's current working
 directory. Absolute paths and `~/...` paths are also supported.

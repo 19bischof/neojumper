@@ -204,7 +204,7 @@ async function editInNeovim(socketPath, file, line) {
   const luaCode =
     "(function() local f=vim.fn.expand(_A.file) local abs=vim.fn.fnamemodify(f,':p') " +
     "if vim.fn.filereadable(f)==0 then return vim.fn.json_encode({ok=false,path=abs}) end " +
-    "vim.cmd('edit '..vim.fn.fnameescape(f)) vim.fn.cursor(_A.line,1) " +
+    "vim.cmd('edit '..vim.fn.fnameescape(f)) vim.cmd('only') vim.fn.cursor(_A.line,1) " +
     "return vim.fn.json_encode({ok=true,path=abs}) end)()";
   const expression =
     `luaeval(${vimString(luaCode)}, {'file': ${vimString(file)}, 'line': ${line}})`;
