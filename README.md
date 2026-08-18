@@ -8,6 +8,8 @@ a fallback when no matching tmux pane is available.
 Relative file paths are resolved from that Neovim instance's current working
 directory. Absolute paths and `~/...` paths are also supported.
 
+Used for userscript to open pullrequests directly in editor
+
 ## Run manually
 
 ```bash
@@ -45,10 +47,11 @@ request logs its total duration and a per-stage timing breakdown (`discover`,
 
 ## Assumptions
 
-- Neovim is installed at `/opt/homebrew/bin/nvim`.
-- tmux is installed at `/opt/homebrew/bin/tmux`.
-- Node.js is installed at `/opt/homebrew/bin/node`.
+- Node.js and Neovim are available on `PATH`.
+- tmux and/or HerdR are available on `PATH` when their multiplexer support is
+  needed. tmux is preferred, with HerdR as the fallback.
 - Neovim is running inside an attached tmux or HerdR session in Ghostty.
+- Ghostty is installed, since Neojumper uses it to bring the terminal forward.
 
 The server only listens on `127.0.0.1`. `POST /api/open` accepts JSON requests
 from localhost.

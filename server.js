@@ -10,11 +10,11 @@ const execFileAsync = promisify(execFile);
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT || 8766);
-const NVIM_BIN = process.env.NVIM_BIN || "/opt/homebrew/bin/nvim";
-const TMUX_BIN = process.env.TMUX_BIN || "/opt/homebrew/bin/tmux";
-const HERDR_BIN = "/opt/homebrew/bin/herdr";
-const PS_BIN = "/bin/ps";
-const OPEN_BIN = "/usr/bin/open";
+const NVIM_BIN = process.env.NVIM_BIN || "nvim";
+const TMUX_BIN = process.env.TMUX_BIN || "tmux";
+const HERDR_BIN = process.env.HERDR_BIN || "herdr";
+const PS_BIN = "ps";
+const OPEN_BIN = "open";
 
 // launchd starts processes without a locale, which makes tmux sanitize the
 // tab separators in "-F" output to underscores and breaks field parsing.
