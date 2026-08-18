@@ -2,7 +2,8 @@
 
 A local API that opens a file at a line in the earliest-created running
 Neovim instance, closes the other windows in the current tab, selects its tmux
-pane, and brings Ghostty forward.
+or HerdR pane, and brings Ghostty forward. tmux is preferred; HerdR is used as
+a fallback when no matching tmux pane is available.
 
 Relative file paths are resolved from that Neovim instance's current working
 directory. Absolute paths and `~/...` paths are also supported.
@@ -47,7 +48,7 @@ request logs its total duration and a per-stage timing breakdown (`discover`,
 - Neovim is installed at `/opt/homebrew/bin/nvim`.
 - tmux is installed at `/opt/homebrew/bin/tmux`.
 - Node.js is installed at `/opt/homebrew/bin/node`.
-- Neovim is running inside an attached tmux client in Ghostty.
+- Neovim is running inside an attached tmux or HerdR session in Ghostty.
 
 The server only listens on `127.0.0.1`. `POST /api/open` accepts JSON requests
 from localhost.

@@ -12,6 +12,7 @@ const HOST = "127.0.0.1";
 const PORT = Number(process.env.PORT || 8766);
 const NVIM_BIN = process.env.NVIM_BIN || "/opt/homebrew/bin/nvim";
 const TMUX_BIN = process.env.TMUX_BIN || "/opt/homebrew/bin/tmux";
+const HERDR_BIN = "/opt/homebrew/bin/herdr";
 const PS_BIN = "/bin/ps";
 const OPEN_BIN = "/usr/bin/open";
 
@@ -197,6 +198,89 @@ async function findTmuxPane(neovimProcessIds) {
   throw new Error("The selected Neovim process is not running inside tmux.");
 }
 
+async function getHerdrJson(args) {
+  const { stdout } = await run(HERDR_BIN, args, { timeout: 3000 });
+  try {
+    return JSON.parse(stdout.trim());
+  } catch {
+    throw new Error("Unexpected response from HerdR.");
+  }
+}
+
+async function findHerdrPane(neovimProcessIds) {
+  const response = await getHerdrJson(["api", "snapshot"]);
+  const snapshot = response.result?.snapshot;
+  if (!snapshot?.panes?.length) {
+    return null;
+  }
+
+  const parents = await getParentProcessIds();
+  const ancestorSets = neovimProcessIds.map((processId) => {
+    return getAncestors(processId, parents);
+  });
+
+  const panes = await Promise.all(
+    snapshot.panes.map(async (pane) => {
+      try {
+        const paneResponse = await getHerdrJson([
+          "pane",
+          "process-info",
+          "--pane",
+          pane.pane_id,
+        ]);
+        return {
+          pane,
+          processInfo: paneResponse.result?.process_info,
+        };
+      } catch {
+        return null;
+      }
+    }),
+  );
+
+  for (const entry of panes) {
+    if (!entry?.processInfo?.foreground_processes) {
+      continue;
+    }
+
+    const foregroundProcessIds = entry.processInfo.foreground_processes.map(
+      (process) => process.pid,
+    );
+    const containsNeovim = ancestorSets.some((ancestors) => {
+      return foregroundProcessIds.some((processId) => {
+        return ancestors.has(processId);
+      });
+    });
+
+    if (containsNeovim) {
+      return {
+        paneId: entry.pane.pane_id,
+        tabId: entry.pane.tab_id,
+        workspaceId: entry.pane.workspace_id,
+      };
+    }
+  }
+
+  return null;
+}
+
+async function findMultiplexerPane(neovimProcessIds) {
+  try {
+    const pane = await findTmuxPane(neovimProcessIds);
+    return pane ? { type: "tmux", ...pane } : null;
+  } catch {
+    // No tmux server, binary, or matching pane: try HerdR next.
+  }
+
+  try {
+    const pane = await findHerdrPane(neovimProcessIds);
+    return pane ? { type: "herdr", ...pane } : null;
+  } catch {
+    // HerdR is optional. Opening the file in Neovim still succeeds without it.
+    return null;
+  }
+}
+
 // Resolve, validate, open and position the cursor in a single Neovim call.
 // The path is resolved by Neovim relative to its own working directory, so
 // relative paths behave the same as if typed inside the running session.
@@ -236,14 +320,32 @@ async function editInNeovim(socketPath, file, line) {
 // its own argument tells tmux to treat what follows as a separate command.
 async function focusTmuxPane(pane) {
   const paneTarget = `${pane.sessionName}:${pane.windowIndex}.${pane.paneId}`;
-  await Promise.all([
-    run(TMUX_BIN, [
-      "switch-client", "-t", pane.sessionName,
-      ";", "select-window", "-t", paneTarget,
-      ";", "select-pane", "-t", paneTarget,
-    ]),
-    run(OPEN_BIN, ["-a", "Ghostty"]),
+  await run(TMUX_BIN, [
+    "switch-client", "-t", pane.sessionName,
+    ";", "select-window", "-t", paneTarget,
+    ";", "select-pane", "-t", paneTarget,
   ]);
+  await bringTerminalForward();
+}
+
+async function bringTerminalForward() {
+  await run(OPEN_BIN, ["-a", "Ghostty"]);
+}
+
+async function focusHerdrPane(pane) {
+  await run(HERDR_BIN, ["workspace", "focus", pane.workspaceId], {
+    timeout: 3000,
+  });
+  await run(HERDR_BIN, ["tab", "focus", pane.tabId], { timeout: 3000 });
+  await bringTerminalForward();
+}
+
+async function focusMultiplexerPane(pane) {
+  if (pane.type === "tmux") {
+    return focusTmuxPane(pane);
+  }
+
+  return focusHerdrPane(pane);
 }
 
 async function openFile(file, line, timings) {
@@ -255,9 +357,13 @@ async function openFile(file, line, timings) {
   // pane, so run both flows concurrently.
   const focusFlow = (async () => {
     const pane = await timed(timings, "findPane", () => {
-      return findTmuxPane(neovimProcessIds);
+      return findMultiplexerPane(neovimProcessIds);
     });
-    await timed(timings, "focus", () => focusTmuxPane(pane));
+    if (!pane) {
+      return null;
+    }
+
+    await timed(timings, "focus", () => focusMultiplexerPane(pane));
     return pane;
   })();
 
@@ -270,7 +376,11 @@ async function openFile(file, line, timings) {
     file: edit.path,
     line,
     socket: socketPath,
-    tmux: `${pane.sessionName}:${pane.windowIndex}.${pane.paneId}`,
+    multiplexer: pane?.type || null,
+    tmux:
+      pane?.type === "tmux"
+        ? `${pane.sessionName}:${pane.windowIndex}.${pane.paneId}`
+        : null,
   };
 }
 
