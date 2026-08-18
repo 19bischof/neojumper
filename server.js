@@ -200,11 +200,13 @@ async function findTmuxPane(neovimProcessIds) {
 // Resolve, validate, open and position the cursor in a single Neovim call.
 // The path is resolved by Neovim relative to its own working directory, so
 // relative paths behave the same as if typed inside the running session.
+// `only` is best-effort: a floating window makes it throw E5601 after the
+// file is already open, which used to turn a successful jump into HTTP 500.
 async function editInNeovim(socketPath, file, line) {
   const luaCode =
     "(function() local f=vim.fn.expand(_A.file) local abs=vim.fn.fnamemodify(f,':p') " +
     "if vim.fn.filereadable(f)==0 then return vim.fn.json_encode({ok=false,path=abs}) end " +
-    "vim.cmd('edit '..vim.fn.fnameescape(f)) vim.cmd('only') vim.fn.cursor(_A.line,1) " +
+    "vim.cmd('edit '..vim.fn.fnameescape(f)) pcall(vim.cmd,'only') vim.fn.cursor(_A.line,1) " +
     "return vim.fn.json_encode({ok=true,path=abs}) end)()";
   const expression =
     `luaeval(${vimString(luaCode)}, {'file': ${vimString(file)}, 'line': ${line}})`;
